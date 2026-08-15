@@ -30,7 +30,9 @@ router.post('/scan', async (req, res) => {
   } = req.body;
 
   if (!imageBase64) return res.status(400).json({ error: 'imageBase64 is required' });
-  if (!process.env.GEMINI_API_KEY) return res.status(500).json({ error: 'Gemini API key not configured' });
+  if (!process.env.GEMINI_API_KEY && !process.env.GROQ_API_KEY && !process.env.HF_TOKEN) {
+    return res.status(500).json({ error: 'No vision provider API key configured' });
+  }
 
   try {
     const items = await analyzeTrashImage(imageBase64, mimeType);

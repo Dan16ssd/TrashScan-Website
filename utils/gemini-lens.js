@@ -209,7 +209,9 @@ const PROVIDERS = [
 ];
 
 async function analyzeTrashImage(imageBase64, mimeType = 'image/jpeg') {
-  if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not set');
+  const anyKeyConfigured =
+    process.env.GEMINI_API_KEY || process.env.GROQ_API_KEY || process.env.HF_TOKEN;
+  if (!anyKeyConfigured) throw new Error('No vision provider API key configured');
 
   let lastErr;
 
@@ -221,7 +223,9 @@ async function analyzeTrashImage(imageBase64, mimeType = 'image/jpeg') {
       } catch (err) {
         lastErr = err;
 
-        if (err.fatal) throw err;
+        // fatal means this provider's own key is missing — skip straight to
+        // the next provider rather than aborting the whole chain.
+        if (err.fatal) break;
 
         const retry = isNetworkError(err) || (err.status && isTransient(err.status));
         if (retry && attempt === 0) {
