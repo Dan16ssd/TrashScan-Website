@@ -109,6 +109,43 @@ async function callGroq(imageBase64, mimeType) {
   return data?.choices?.[0]?.message?.content || '';
 }
 
+// ── Hugging Face router (free tier, non-Gemini/non-Groq backstop) ─────────────
+async function callHuggingFace(imageBase64, mimeType) {
+  const apiKey = process.env.HF_TOKEN;
+  if (!apiKey) throw Object.assign(new Error('HF_TOKEN not set'), { fatal: true });
+
+  const resp = await fetch('https://router.huggingface.co/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'Qwen/Qwen2.5-VL-3B-Instruct',
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
+          { type: 'text', text: PROMPT },
+        ],
+      }],
+      temperature: 0.1,
+      max_tokens: 600,
+    }),
+    signal: AbortSignal.timeout(30000),
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    const err = new Error(`HuggingFace error ${resp.status}: ${text}`);
+    err.status = resp.status;
+    throw err;
+  }
+
+  const data = await resp.json();
+  return data?.choices?.[0]?.message?.content || '';
+}
+
 // ── Parse and enrich array response from any model ────────────────────────────
 function parseAndEnrichArray(rawText) {
   const cleaned = rawText.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
@@ -156,16 +193,19 @@ function parseAndEnrichArray(rawText) {
   });
 }
 
-// ── Fallback chain: gemini-2.5-flash → gemini-2.5-pro → gemini-2.5-flash-lite → groq-llama-vision ──
+// ── Fallback chain: gemini-2.5-flash → gemini-2.5-pro → gemini-2.5-flash-lite → groq-llama-vision → hf-qwen2.5-vl ──
 // Note: gemini-1.5-flash was retired from the Gemini API in Sept 2025 and now
 // returns a "model not found" error, so the chain uses currently available
 // models instead — 2.5-pro is slower but more precise, used as the second
-// attempt before dropping to the lighter flash-lite and Groq.
+// attempt before dropping to the lighter flash-lite. Groq and the Hugging
+// Face router are independent (non-Gemini) providers, kept as last-resort
+// backstops so a Gemini-wide outage doesn't take the scanner down.
 const PROVIDERS = [
   { name: 'gemini-2.5-flash', call: (b64, mime) => callGemini('gemini-2.5-flash', b64, mime) },
   { name: 'gemini-2.5-pro', call: (b64, mime) => callGemini('gemini-2.5-pro', b64, mime) },
   { name: 'gemini-2.5-flash-lite', call: (b64, mime) => callGemini('gemini-2.5-flash-lite', b64, mime) },
   { name: 'groq-llama-vision', call: (b64, mime) => callGroq(b64, mime) },
+  { name: 'hf-qwen2.5-vl', call: (b64, mime) => callHuggingFace(b64, mime) },
 ];
 
 async function analyzeTrashImage(imageBase64, mimeType = 'image/jpeg') {
