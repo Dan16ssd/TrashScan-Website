@@ -156,10 +156,13 @@ function parseAndEnrichArray(rawText) {
   });
 }
 
-// ── Fallback chain: gemini-2.5-flash → gemini-1.5-flash → groq-llama-vision ──
+// ── Fallback chain: gemini-2.5-flash → gemini-2.5-flash-lite → groq-llama-vision ──
+// Note: gemini-1.5-flash was retired from the Gemini API in Sept 2025 and now
+// returns a "model not found" error, so the mid-chain fallback uses the
+// currently available 2.5-flash-lite model instead.
 const PROVIDERS = [
   { name: 'gemini-2.5-flash', call: (b64, mime) => callGemini('gemini-2.5-flash', b64, mime) },
-  { name: 'gemini-1.5-flash', call: (b64, mime) => callGemini('gemini-1.5-flash', b64, mime) },
+  { name: 'gemini-2.5-flash-lite', call: (b64, mime) => callGemini('gemini-2.5-flash-lite', b64, mime) },
   { name: 'groq-llama-vision', call: (b64, mime) => callGroq(b64, mime) },
 ];
 
