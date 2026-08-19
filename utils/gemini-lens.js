@@ -121,7 +121,7 @@ async function callHuggingFace(imageBase64, mimeType) {
       'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'Qwen/Qwen2.5-VL-3B-Instruct',
+      model: 'Qwen/Qwen2.5-VL-72B-Instruct',
       messages: [{
         role: 'user',
         content: [
@@ -193,17 +193,26 @@ function parseAndEnrichArray(rawText) {
   });
 }
 
-// ── Fallback chain: gemini-2.5-flash → gemini-2.5-pro → gemini-2.5-flash-lite → groq-llama-vision → hf-qwen2.5-vl ──
-// Note: gemini-1.5-flash was retired from the Gemini API in Sept 2025 and now
-// returns a "model not found" error, so the chain uses currently available
-// models instead — 2.5-pro is slower but more precise, used as the second
-// attempt before dropping to the lighter flash-lite. Groq and the Hugging
-// Face router are independent (non-Gemini) providers, kept as last-resort
-// backstops so a Gemini-wide outage doesn't take the scanner down.
+// ── Fallback chain: gemini-flash-lite-latest → gemini-flash-latest → groq-llama-vision → hf-qwen2.5-vl ──
+//
+// Verified against the live APIs on 2026-08-19 (do not re-pin to specific
+// dated model IDs without re-checking — this API drifts fast):
+//   - gemini-2.5-flash hangs/times out on every image request (30s+).
+//   - gemini-2.5-pro and gemini-2.5-flash-lite are retired for new API keys
+//     (404 "no longer available to new users").
+//   - gemini-pro-latest requires billing — this key gets a hard 429 on it.
+//   - gemini-flash-lite-latest and gemini-flash-latest both work; -latest
+//     aliases auto-track Google's current model instead of a pinned
+//     version, which is what broke the chain twice already.
+//   - Groq no longer has ANY vision-capable model on this account — the
+//     llama-4-scout entry below 404s. Kept in the chain (fails fast, ~150ms)
+//     in case Groq relists a vision model, but it does nothing useful today.
+//   - The HF router has no free vision model on this token, and its paid
+//     ones return 402 (monthly credits depleted). Model ID below is at
+//     least valid; it needs HF billing enabled to actually work.
 const PROVIDERS = [
-  { name: 'gemini-2.5-flash', call: (b64, mime) => callGemini('gemini-2.5-flash', b64, mime) },
-  { name: 'gemini-2.5-pro', call: (b64, mime) => callGemini('gemini-2.5-pro', b64, mime) },
-  { name: 'gemini-2.5-flash-lite', call: (b64, mime) => callGemini('gemini-2.5-flash-lite', b64, mime) },
+  { name: 'gemini-flash-lite-latest', call: (b64, mime) => callGemini('gemini-flash-lite-latest', b64, mime) },
+  { name: 'gemini-flash-latest', call: (b64, mime) => callGemini('gemini-flash-latest', b64, mime) },
   { name: 'groq-llama-vision', call: (b64, mime) => callGroq(b64, mime) },
   { name: 'hf-qwen2.5-vl', call: (b64, mime) => callHuggingFace(b64, mime) },
 ];
