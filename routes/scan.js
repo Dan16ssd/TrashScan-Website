@@ -5,10 +5,8 @@ const router  = express.Router();
 const { analyzeTrashImage } = require('../utils/gemini-lens');
 const { getDb, getOrgBins, setOrgBin } = require('../utils/firebase-admin');
 
-let _io          = null;
 let _scanHistory = null;
 
-function setIo(io)           { _io = io; }
 function setScanHistory(sh)  { _scanHistory = sh; }
 
 const POINTS_PER_SCAN      = 10;
@@ -50,7 +48,6 @@ router.post('/scan', async (req, res) => {
           bin.lastScanTime = new Date().toISOString();
           bin.status = bin.fillLevel > 85 ? 'full' : bin.fillLevel > 60 ? 'warning' : 'ok';
           await setOrgBin(org_id, binId, bin);
-          if (_io) _io.to(org_id).emit('bin-updated', await getOrgBins(org_id));
         }
       } catch (binErr) {
         console.warn('Bin update failed (non-fatal):', binErr.message);
@@ -148,4 +145,4 @@ router.post('/scan', async (req, res) => {
   }
 });
 
-module.exports = { router, setIo, setScanHistory };
+module.exports = { router, setScanHistory };

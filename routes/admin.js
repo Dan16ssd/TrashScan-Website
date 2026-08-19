@@ -5,10 +5,8 @@ const router       = express.Router();
 const { requireAuth } = require('../middleware/auth');
 const { getDb, getOrgBins, setOrgBin, deleteOrgBin } = require('../utils/firebase-admin');
 
-let _io          = null;
 let _scanHistory = null;
 
-function setIo(io)          { _io = io; }
 function setScanHistory(sh) { _scanHistory = sh; }
 
 // GET /api/admin/bins
@@ -48,7 +46,6 @@ router.put('/bins/:id', requireAuth, async (req, res) => {
       _scanHistory.unshift({ timestamp: new Date().toISOString(), binId: id, binName: bin.name, material: bin.lastMaterial || '—', action: 'Admin updated' });
       if (_scanHistory.length > 200) _scanHistory.length = 200;
     }
-    if (_io) _io.to(org_id).emit('bin-updated', await getOrgBins(org_id));
     res.json(bin);
   } catch (err) {
     res.status(500).json({ error: 'Failed to update bin' });
@@ -63,7 +60,6 @@ router.delete('/bins/:id', requireAuth, async (req, res) => {
 
   try {
     await deleteOrgBin(org_id, id);
-    if (_io) _io.to(org_id).emit('bin-updated', await getOrgBins(org_id));
     res.json({ message: `Bin ${id} removed` });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete bin' });
@@ -83,7 +79,6 @@ router.post('/bins', requireAuth, async (req, res) => {
 
     const newBin = { id, name, location, fillLevel: 0, lastMaterial: null, lastScanTime: null, status: 'ok' };
     await setOrgBin(org_id, id, newBin);
-    if (_io) _io.to(org_id).emit('bin-updated', await getOrgBins(org_id));
     res.status(201).json(newBin);
   } catch (err) {
     res.status(500).json({ error: 'Failed to add bin' });
@@ -183,4 +178,4 @@ router.get('/logs', requireAuth, (req, res) => {
   });
 });
 
-module.exports = { router, setIo, setScanHistory };
+module.exports = { router, setScanHistory };
