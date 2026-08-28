@@ -84,7 +84,7 @@ async function callGroq(imageBase64, mimeType) {
       'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+      model: 'qwen/qwen3.8-27b',
       messages: [{
         role: 'user',
         content: [
@@ -193,27 +193,29 @@ function parseAndEnrichArray(rawText) {
   });
 }
 
-// ── Fallback chain: gemini-flash-lite-latest → gemini-flash-latest → groq-llama-vision → hf-qwen2.5-vl ──
+// ── Fallback chain: groq-qwen3-vision → gemini-flash-lite-latest → gemini-flash-latest → hf-qwen2.5-vl ──
 //
-// Verified against the live APIs on 2026-08-19 (do not re-pin to specific
+// Verified against the live APIs on 2026-08-27 (do not re-pin to specific
 // dated model IDs without re-checking — this API drifts fast):
-//   - gemini-2.5-flash hangs/times out on every image request (30s+).
-//   - gemini-2.5-pro and gemini-2.5-flash-lite are retired for new API keys
-//     (404 "no longer available to new users").
-//   - gemini-pro-latest requires billing — this key gets a hard 429 on it.
-//   - gemini-flash-lite-latest and gemini-flash-latest both work; -latest
-//     aliases auto-track Google's current model instead of a pinned
-//     version, which is what broke the chain twice already.
-//   - Groq no longer has ANY vision-capable model on this account — the
-//     llama-4-scout entry below 404s. Kept in the chain (fails fast, ~150ms)
-//     in case Groq relists a vision model, but it does nothing useful today.
+//   - The production server is hosted in Seoul, Korea. Google's Gemini API
+//     blocks requests from that region outright — every callGemini() call
+//     fails there regardless of key validity. Gemini stays in the chain as
+//     a fallback for any deployment NOT in a blocked region, but it can no
+//     longer be the primary provider.
+//   - Groq's previous vision model (meta-llama/llama-4-scout-17b-16e-instruct)
+//     was retired and 404s. qwen/qwen3.8-27b is Groq's current active
+//     vision-capable model and returns clean, direct text (no <think>
+//     preamble) — verified working end-to-end with a real photo. Its
+//     sibling qwen/qwen3.6-27b also works but wraps output in <think>...
+//     </think> reasoning first, which risks confusing the JSON parser, so
+//     it is not used here.
 //   - The HF router has no free vision model on this token, and its paid
 //     ones return 402 (monthly credits depleted). Model ID below is at
-//     least valid; it needs HF billing enabled to actually work.
+//     least valid; it needs a topped-up/alternate HF token to actually work.
 const PROVIDERS = [
+  { name: 'groq-qwen3-vision', call: (b64, mime) => callGroq(b64, mime) },
   { name: 'gemini-flash-lite-latest', call: (b64, mime) => callGemini('gemini-flash-lite-latest', b64, mime) },
   { name: 'gemini-flash-latest', call: (b64, mime) => callGemini('gemini-flash-latest', b64, mime) },
-  { name: 'groq-llama-vision', call: (b64, mime) => callGroq(b64, mime) },
   { name: 'hf-qwen2.5-vl', call: (b64, mime) => callHuggingFace(b64, mime) },
 ];
 
